@@ -15,8 +15,7 @@ This project focuses on data analysis and machine learning techniques applied to
 - Scikit-learn
 - Keras
 - Matplotlib (for plotting ROC curves)
-- KBASE
-
+- 
 ## Installation
 1. Clone the repository:
    ```bash
