@@ -1,0 +1,31 @@
+
+Lasso Regression Equation for Top 3 Features:
+Logit(Probability of Active LN) = -0.1106 *  L-selectin ng/mg + -0.0975 * Ferritin ng/mg + -0.0867 * TWEAK
+Top 3 Features:
+Accuracy: 0.91
+AUC: 0.96
+Number of zero coefficients: 0
+Number of individual AUCs greater than the combined AUC for Top 3: 0
+
+
+Lasso Regression Equation for Top 5 Features:
+Logit(Probability of Active LN) = -0.1106 *  L-selectin ng/mg + -0.0975 * Ferritin ng/mg + -0.0867 * TWEAK + -0.0679 * IL-2rβ pg/mg + -0.0565 * NCAM1 ng/mg
+Top 5 Features:
+Accuracy: 0.91
+AUC: 0.96
+Number of zero coefficients: 0
+Number of individual AUCs greater than the combined AUC for Top 5: 0
+
+
+Lasso Regression Equation for Top 10 Features:
+Logit(Probability of Active LN) = -0.1106 *  L-selectin ng/mg + -0.0975 * Ferritin ng/mg + -0.0867 * TWEAK + -0.0679 * IL-2rβ pg/mg + -0.0565 * NCAM1 ng/mg + -0.0519 *  TGFβ pg/mg
+Top 10 Features:
+Accuracy: 0.91
+AUC: 0.96
+Number of zero coefficients: 4
+Number of individual AUCs greater than the combined AUC for Top 10: 0
+
+
+
+
+
