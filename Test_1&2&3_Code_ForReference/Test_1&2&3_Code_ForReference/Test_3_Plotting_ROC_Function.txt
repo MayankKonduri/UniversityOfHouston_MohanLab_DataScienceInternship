@@ -1,0 +1,58 @@
+def test_3_roc_curve(input_excel_file, HC, PG, index=10, Protein=['a'], Choose_index=True, Choose_Protein=False, hide_labels=False):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from sklearn.metrics import roc_curve, auc
+
+    # Function to convert string representation of a list to a list
+    def parse_list_string(x):
+        if isinstance(x, str):
+            # Add commas between elements
+            x = ' '.join(x.split())
+            x = x.replace('[', '').replace(']', '').replace(' ', ',')
+            return eval(f'[{x}]')
+        return x
+
+    df_plottable = pd.read_excel(f'{input_excel_file}.xlsx')
+
+    # Apply the function to the 'tpr' and 'fpr' columns
+    df_plottable['tpr'] = df_plottable['tpr'].apply(parse_list_string)
+    df_plottable['fpr'] = df_plottable['fpr'].apply(parse_list_string)
+
+    # Calculate the sensitivity value (max TPR) for sorting purpose
+    df_plottable['sensitivity'] = df_plottable['tpr'].apply(max)
+
+    # Sort primarily by 'AUC value' in descending order and then by 'sensitivity' in descending order
+    df_plottable = df_plottable.sort_values(by=['AUC value', 'Sensitivity'], ascending=[False, False])
+    df_plottable = df_plottable.reset_index(drop=True)
+
+    hidden_label = [f'Prot_{i+1}' for i in range(index)]
+
+    if hide_labels:
+        label = hidden_label
+    else:
+        label = [f"{df_plottable['Protein'][i]} (AUC={df_plottable['AUC value'][i]:.2f})" for i in range(len(df_plottable))]
+
+    if Choose_index:
+        for i in range(index):
+            plt.plot(df_plottable['fpr'][i], df_plottable['tpr'][i], label=label[i])
+
+        plt.xlabel('1 - Specificity', fontsize=16)
+        plt.ylabel('Sensitivity', fontsize=16)
+        plt.title(f'ROC Analysis for {PG} vs {HC}', fontweight='bold', fontsize=16)
+        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        plt.show()
+
+    if Choose_Protein:
+        for i in Protein:
+            for j in range(df_plottable['Protein'].size):
+                if df_plottable['Protein'][j] == i:
+                    a = j
+                    break  # Once we find the protein, we can stop the loop
+            plt.plot(df_plottable['fpr'][a], df_plottable['tpr'][a], label=label[a])
+
+        plt.xlabel('1 - Specificity', fontsize=16)
+        plt.ylabel('Sensitivity', fontsize=16)
+        plt.title(f'ROC Analysis for {PG} vs {HC}', fontweight='bold', fontsize=16)
+        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        plt.show()
+

@@ -1,0 +1,1154 @@
+class Tests:
+
+    
+    def __init__(self,input_file_directory, input_file, sheet_name, output_file_directory, HC_PG_list, number_HC_PG_samples_list, FC_type):
+        self.input_file_directory = input_file_directory
+        self.input_file = input_file
+        self.sheet_name = sheet_name
+        self.output_file_directory = output_file_directory
+        self.HC_PG_list = HC_PG_list
+        self.number_HC_PG_samples_list = number_HC_PG_samples_list
+        self.FC_type = FC_type
+
+
+
+    
+    def drop(self,drop_title):
+        import pandas as pd
+
+        input_file_directory = self.input_file_directory
+        input_file = self.input_file
+        
+        def normalize_column_names(columns):
+            return columns.str.replace(r'\.\d+$', '', regex=True)
+            
+        df = pd.read_excel(f'{input_file_directory}{input_file}.xlsx')
+        
+        normalized_columns = normalize_column_names(df.columns)
+    
+        # Count occurrences of the specific column title
+        title_count = (normalized_columns == drop_title).sum()
+        title_count
+        df = df.drop(drop_title,axis=1)
+        for i in range(1,title_count):
+            df = df.drop(f'{drop_title}.{i}',axis=1)
+        df.to_excel(f'{input_file_directory}{input_file}.xlsx', index=False)
+        return df
+
+
+
+    
+    def test_1_2 (self, test_1_decimals = 3, test_2_decimals = 3,
+              Testing_for_normality = False, include_CI = False, Paired_non_parametric = False):
+        """ 
+        !!!!Note!!!!: The column containing the boolean values of Cases and Controls Should be titled "Group". 
+                        The input excel file need to be in the format style of the excel "Template" file. 
+                        
+        
+        
+        A function that takes 3 inputs (input_excel_file, output_excel_file, remove_outliers) and returns a csv file 
+        and a Dataframe of proteins and their respective AUC values.
+        
+        Args:
+        input_excel_file (str): The directory of the Excel file on which calculation will be applied on.
+        output_excel_file (str): The directory and name of the Excel file on which you will find the results on.
+        Please include .csv file in writing the name of your output_excel_file (ex. 'name.csv').
+        remove_outliers (bool): True if you want to remove outliers from the data, False otherwise.
+        
+        Returns:
+        A Dataframe of proteins and their respective AUC values.
+        """
+        import pandas as pd
+        import numpy as np
+        from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix
+        from scipy import stats
+        from scipy.stats import shapiro, ttest_ind, mannwhitneyu, ranksums, wilcoxon
+        import statsmodels
+        from statsmodels.stats import multitest
+    
+        input_file_directory = self.input_file_directory
+        input_file = self.input_file
+        sheet_name = self.sheet_name
+        output_file_directory = self.output_file_directory
+        HC = self.HC_PG_list[0]
+        PG = self.HC_PG_list[1]
+    
+        input_excel_file = f'{input_file_directory}{input_file}.xlsx'
+        
+        data=pd.read_excel(input_excel_file, sheet_name)
+        data
+        
+        Protein_names_lst = []
+        mean_HC_lst = []
+        CI_HC_lst = []
+        mean_with_CI_HC_lst = []
+        median_HC_lst = []
+        mean_PG_lst = []
+        CI_PG_lst = []
+        mean_with_CI_PG_lst = []
+        median_PG_lst = []
+        fold_change_mean_lst = []
+        log_2_fold_change_mean_lst = []
+        fold_change_median_lst = []
+        log_2_fold_change_median_lst = []
+        auc_scores_lst = []
+        unmodified_auc_scores_lst = []
+        specificity_lst = []
+        sensitivity_lst = []
+        youden_index_lst = []
+        optimal_cutoff_lst = []
+        p_value_shapiro_HC_lst = []
+        p_value_shapiro_PG_lst = []
+        test_type_lst = []
+        test_p_value_lst = []
+        log_10_test_p_value_lst = []
+        auc_scores_with_CI_lst = []
+        specificity_with_CI_lst = []
+        sensitivity_with_CI_lst = []
+        youden_index_with_CI_lst = []
+        optimal_cutoff_with_CI_lst = []
+        fpr_lst = []
+        tpr_lst = []
+        labels_lst = []
+        y_pred_optimal_lst = []
+    
+    
+        for i in range(1,data.columns.shape[0]): 
+    
+            cases = data.iloc[data.loc[data['Group'] == 1].index,i]#.drop_duplicates()
+            cases = cases.tolist()
+            controls = data.iloc[data.loc[data['Group'] == 0].index,i]#.drop_duplicates()
+            controls = controls.tolist()
+            # Combine the cases and controls into a single list
+            labels = [1] * len(cases) + [0] * len(controls)
+            # Combine the measurements for cases and controls into a single list
+            variables = cases + controls
+            labels_lst.append(labels)
+            
+            # Create a list of proteins
+            Protein_names_lst.append(data.columns.values[i])
+    
+            
+            
+            # Compute the AUC-ROC score 
+            auc_roc = roc_auc_score(labels, variables)
+            unmodified_auc_scores_lst.append(auc_roc)
+            fpr, tpr , thresholds = roc_curve(labels, variables,drop_intermediate=False)
+            if auc_roc < 0.5:
+                auc_roc = 1 - auc_roc
+                tpr,fpr , thresholds = roc_curve(labels, variables,drop_intermediate=False)
+                
+            
+            rounded_auc_roc = round(auc_roc,test_2_decimals)
+            auc_scores_lst.append(rounded_auc_roc)
+            
+            # Compute the Youden Index and Cutoff
+            
+            # tpr, fpr , thresholds = roc_curve(labels, variables,drop_intermediate=False)
+            youden_index = tpr - fpr
+            optimal_threshold_index = np.argmax(youden_index)
+            optimal_cutoff = thresholds[optimal_threshold_index]
+            rounded_youden_index = round(youden_index[optimal_threshold_index],test_2_decimals)
+            rounded_optimal_cutoff = round(optimal_cutoff,test_2_decimals)
+            youden_index_lst.append(rounded_youden_index)
+            optimal_cutoff_lst.append(rounded_optimal_cutoff)
+            fpr_lst.append(fpr)
+            tpr_lst.append(tpr)
+            
+            # Compute the Sensitivity and Specificity
+            y_pred_optimal = (variables >= optimal_cutoff).astype(int)
+            y_pred_optimal_lst.append(y_pred_optimal)
+            conf_matrix = confusion_matrix(labels, y_pred_optimal)
+            tn, fp, fn, tp = conf_matrix.ravel()
+            specificity = tn / (tn + fp)
+            rounded_specificity = round(specificity,test_2_decimals)
+            sensitivity = tp / (tp + fn)
+            rounded_sensitivity = round(sensitivity,test_2_decimals)
+            specificity_lst.append(rounded_specificity)
+            sensitivity_lst.append(rounded_sensitivity)
+    
+            if include_CI:
+                
+                # Bootstrapping to compute the confidence Interval of previous scores
+                n_bootstraps = 100
+                rng_seed = 42  # control reproducibility
+                
+                bootstrapped_scores = []
+                bootstrapped_specificity_lst = []
+                bootstrapped_sensitivity_lst = []
+                bootstrapped_youden_index_lst = []
+                bootstrapped_optimal_cutoff_lst = []
+                
+                rng = np.random.RandomState(rng_seed)
+                for i in range(n_bootstraps):
+                    # bootstrap by sampling with replacement on the prediction indices
+                    indices = rng.randint(0, len(variables), len(variables))
+                    if len(np.unique(np.array(labels)[indices])) < 2:
+                        # We need at least one positive and one negative sample for ROC AUC
+                        # to be defined: reject the sample
+                        continue
+        
+                    score = roc_auc_score(np.array(labels)[indices], np.array(variables)[indices])
+                    resampled_fpr, resampled_tpr, resampled_thresholds = roc_curve(np.array(labels)[indices], np.array(variables)[indices])
+                    if score < 0.5: 
+                        score = 1 - score
+                        resampled_tpr, resampled_fpr, resampled_thresholds = roc_curve(np.array(labels)[indices], np.array(variables)[indices])
+                    bootstrapped_scores.append(score)
+                    resampled_youden_index = resampled_tpr - resampled_fpr
+                    resampled_optimal_threshold_index = np.argmax(resampled_youden_index)
+                    resampled_optimal_cutoff = resampled_thresholds[resampled_optimal_threshold_index]
+                    resampled_y_pred_optimal = (np.array(variables)[indices] >= resampled_optimal_cutoff).astype(int)
+                    conf_matrix = confusion_matrix(np.array(labels)[indices], resampled_y_pred_optimal)
+                    resampled_tn, resampled_fp, resampled_fn, resampled_tp = conf_matrix.ravel()
+                    resampled_specificity = resampled_tn / (resampled_tn + resampled_fp)
+                    resampled_sensitivity = resampled_tp / (resampled_tp + resampled_fn)
+                    
+                    bootstrapped_specificity_lst.append(resampled_specificity)
+                    bootstrapped_sensitivity_lst.append(resampled_sensitivity)
+                    bootstrapped_youden_index_lst.append(resampled_youden_index[resampled_optimal_threshold_index])
+                    bootstrapped_optimal_cutoff_lst.append(resampled_optimal_cutoff)
+                    
+                sorted_scores = np.array(bootstrapped_scores)
+                sorted_scores.sort()
+                sorted_bootstrapped_specificity_lst = np.array(bootstrapped_specificity_lst)
+                sorted_bootstrapped_specificity_lst.sort()
+                sorted_bootstrapped_sensitivity_lst = np.array(bootstrapped_sensitivity_lst)
+                sorted_bootstrapped_sensitivity_lst.sort()
+                sorted_bootstrapped_youden_index_lst = np.array(bootstrapped_youden_index_lst)
+                sorted_bootstrapped_youden_index_lst.sort()
+                sorted_bootstrapped_optimal_cutoff_lst = np.array(bootstrapped_optimal_cutoff_lst)
+                sorted_bootstrapped_optimal_cutoff_lst.sort()
+        
+                # Computing the lower and upper bound of the 95% confidence interval
+        
+                auc_confidence_lower = sorted_scores[int(0.025 * len(sorted_scores))]
+                auc_confidence_upper = sorted_scores[int(0.975 * len(sorted_scores))]
+                rounded_auc_confidence_lower = round(auc_confidence_lower,test_2_decimals)
+                rounded_auc_confidence_upper = round(auc_confidence_upper,test_2_decimals)
+                auc_scores_with_CI_lst.append(
+                    f'{rounded_auc_roc} ({rounded_auc_confidence_lower}-{rounded_auc_confidence_upper})')
+                
+                specificity_confidence_lower = sorted_bootstrapped_specificity_lst[int(0.025 * len(sorted_bootstrapped_specificity_lst))]
+                specificity_confidence_upper = sorted_bootstrapped_specificity_lst[int(0.975 * len(sorted_bootstrapped_specificity_lst))]
+                rounded_specificity_confidence_lower = round(specificity_confidence_lower,test_2_decimals)
+                rounded_specificity_confidence_upper = round(specificity_confidence_upper,test_2_decimals)
+                specificity_with_CI_lst.append(
+                    f'{rounded_specificity} ({rounded_specificity_confidence_lower}-{rounded_specificity_confidence_upper})')
+                
+                sensitivity_confidence_lower = sorted_bootstrapped_sensitivity_lst[int(0.025 * len(sorted_bootstrapped_sensitivity_lst))]
+                sensitivity_confidence_upper = sorted_bootstrapped_sensitivity_lst[int(0.975 * len(sorted_bootstrapped_sensitivity_lst))]
+                rounded_sensitivity_confidence_lower = round(sensitivity_confidence_lower,test_2_decimals)
+                rounded_sensitivity_confidence_upper = round(sensitivity_confidence_upper,test_2_decimals)
+                sensitivity_with_CI_lst.append(
+                    f'{rounded_sensitivity} ({rounded_sensitivity_confidence_lower}-{rounded_sensitivity_confidence_upper})')
+                
+                youden_index_confidence_lower = sorted_bootstrapped_youden_index_lst[int(0.025 * len(sorted_bootstrapped_youden_index_lst))]
+                youden_index_confidence_upper = sorted_bootstrapped_youden_index_lst[int(0.975 * len(sorted_bootstrapped_youden_index_lst))]
+                rounded_youden_index_confidence_lower = round(youden_index_confidence_lower,test_2_decimals)
+                rounded_youden_index_confidence_upper = round(youden_index_confidence_upper,test_2_decimals)
+                youden_index_with_CI_lst.append(
+                    f'{rounded_youden_index} ({rounded_youden_index_confidence_lower}-{rounded_youden_index_confidence_upper})')
+                
+                optimal_cutoff_confidence_lower = sorted_bootstrapped_optimal_cutoff_lst[int(0.025 * len(sorted_bootstrapped_optimal_cutoff_lst))]
+                optimal_cutoff_confidence_upper = sorted_bootstrapped_optimal_cutoff_lst[int(0.975 * len(sorted_bootstrapped_optimal_cutoff_lst))]
+                rounded_optimal_cutoff_confidence_lower = round(optimal_cutoff_confidence_lower,test_2_decimals)
+                rounded_optimal_cutoff_confidence_upper = round(optimal_cutoff_confidence_upper,test_2_decimals)
+                optimal_cutoff_with_CI_lst.append(
+                    f'{rounded_optimal_cutoff} ({rounded_optimal_cutoff_confidence_lower}-{rounded_optimal_cutoff_confidence_upper})')
+            
+            # Compute the mean, CI and median for controls
+            mean_HC = np.mean(controls)
+            rounded_mean_HC = round(mean_HC, test_1_decimals)
+            median_HC = np.median(controls)
+            rounded_median_HC = round(median_HC, test_1_decimals)
+            
+            if include_CI:
+                CI_HC = stats.t.interval(0.95, len(controls)-1, loc=mean_HC, scale=stats.sem(controls))
+                lower_bound_HC, upper_bound_HC = CI_HC
+                rounded_lower_bound_HC = round(lower_bound_HC, test_1_decimals)
+                rounded_upper_bound_HC = round(upper_bound_HC, test_1_decimals)
+                CI_HC_lst.append(CI_HC)
+                mean_with_CI_HC_lst.append(f'{rounded_mean_HC} ({rounded_lower_bound_HC}-{rounded_upper_bound_HC})')
+    
+                
+            mean_HC_lst.append(rounded_mean_HC)
+            median_HC_lst.append(rounded_median_HC)
+    
+            
+            # Compute the mean, CI and median for cases
+            mean_PG = np.mean(cases)
+            rounded_mean_PG = round(mean_PG, test_1_decimals)
+            median_PG = np.median(cases)
+            rounded_median_PG = round(median_PG, test_1_decimals)
+    
+            if include_CI:
+                CI_PG = stats.t.interval(0.95, len(cases)-1, loc=mean_PG, scale=stats.sem(cases))
+                lower_bound_PG, upper_bound_PG = CI_PG
+                rounded_lower_bound_PG = round(lower_bound_PG, test_1_decimals)
+                rounded_upper_bound_PG = round(upper_bound_PG, test_1_decimals)
+                CI_PG_lst.append(CI_PG)
+                mean_with_CI_PG_lst.append(f'{rounded_mean_PG} ({rounded_lower_bound_PG}-{rounded_upper_bound_PG})')
+    
+            mean_PG_lst.append(rounded_mean_PG)
+            median_PG_lst.append(rounded_median_PG)
+            
+            # Compute the fold change mean
+            fold_change_mean = mean_PG / mean_HC
+            rounded_fold_change_mean = round(fold_change_mean,test_1_decimals)
+            log_2_fold_change_mean = np.log2(fold_change_mean)
+            rounded_log_2_fold_change_mean = round(log_2_fold_change_mean,test_1_decimals)
+            fold_change_mean_lst.append(rounded_fold_change_mean)
+            log_2_fold_change_mean_lst.append(rounded_log_2_fold_change_mean)
+    
+            # Compute the fold change median
+            fold_change_median = median_PG / median_HC
+            rounded_fold_change_median = round(fold_change_median,test_1_decimals)
+            log_2_fold_change_median = np.log2(fold_change_median)
+            rounded_log_2_fold_change_median = round(log_2_fold_change_median,test_1_decimals)
+            fold_change_median_lst.append(rounded_fold_change_median)
+            log_2_fold_change_median_lst.append(rounded_log_2_fold_change_median)
+    
+        
+            if Paired_non_parametric:
+                mw_statistic, test_p_value = wilcoxon(controls, cases)
+                test_p_value_lst.append(test_p_value)
+                log_10_test_p_value = np.log10(test_p_value)
+                log_10_test_p_value_lst.append(log_10_test_p_value)
+    
+                p_test = 'Wilcoxon Signed Rank p-value'
+                
+    
+            else:
+                p_test = 'Man-Whitney U-Test p-value'
+                if Testing_for_normality == False:
+                    mw_statistic, test_p_value = ranksums(controls, cases)
+                    test_p_value_lst.append(test_p_value)
+                    log_10_test_p_value = np.log10(test_p_value)
+                    log_10_test_p_value_lst.append(log_10_test_p_value)
+                    
+                else:
+                    # Testing for normality
+                    _, p_value_shapiro_HC = shapiro(controls)
+                    _, p_value_shapiro_PG = shapiro(cases)
+                    p_value_shapiro_HC_lst.append(p_value_shapiro_HC)
+                    p_value_shapiro_PG_lst.append(p_value_shapiro_PG)
+        
+                    # # Compute the statistical test
+                    if (p_value_shapiro_HC > 0.05) & (p_value_shapiro_PG > 0.05):
+                        test_type = 'Independent T-test'
+                        t_statistic, test_p_value = ttest_ind(controls, cases) 
+                    else:
+                        test_type = 'Man Whitney U-test'
+                        mw_statistic, test_p_value = ranksums(controls, cases)
+                    test_type_lst.append(test_type)
+                    test_p_value_lst.append(test_p_value)
+                    log_10_test_p_value = np.log10(test_p_value)
+                    log_10_test_p_value_lst.append(log_10_test_p_value)
+            
+            # Perform multiple testing correction using the Benjamini-Hochberg procedure
+        q_values_lst = multitest.multipletests(test_p_value_lst, alpha=0.05, method='fdr_bh')[1]
+    
+        num_less_001 = 0
+        num_less_01 = 0
+        num_less_05 = 0
+        num_eq_001 = 0
+        num_eq_01 = 0
+        num_eq_05 = 0
+        for i in range(len(test_p_value_lst)):
+            if test_p_value_lst[i] < 0.001: 
+               num_less_001 += 1
+            if test_p_value_lst[i] < 0.01: 
+               num_less_01 += 1 
+            if test_p_value_lst[i] < 0.05: 
+               num_less_05 += 1 
+            if test_p_value_lst[i] == 0.001: 
+               num_eq_001 += 1
+            if test_p_value_lst[i] == 0.01: 
+               num_eq_01 += 1
+            if test_p_value_lst[i] == 0.05: 
+               num_eq_05 += 1
+    
+        num_greater_95 = 0
+        num_greater_90 = 0
+        num_greater_85 = 0
+        num_greater_80 = 0
+        num_eq_95 = 0
+        num_eq_90 = 0
+        num_eq_85 = 0
+        num_eq_80 = 0
+        for i in range(len(auc_scores_lst)):
+            if auc_scores_lst[i] > 0.95: 
+               num_greater_95 += 1
+            if auc_scores_lst[i] > 0.9: 
+               num_greater_90 += 1
+            if auc_scores_lst[i] > 0.85: 
+               num_greater_85 += 1
+            if auc_scores_lst[i] > 0.8: 
+               num_greater_80 += 1
+            if auc_scores_lst[i] == 0.95: 
+               num_eq_95 += 1
+            if auc_scores_lst[i] == 0.9: 
+               num_eq_90 += 1
+            if auc_scores_lst[i] == 0.85: 
+               num_eq_85 += 1
+            if auc_scores_lst[i] == 0.8: 
+               num_eq_80 += 1
+    
+        num_dict = {'AUC > 0.95': [num_greater_95], 'AUC = 0.95': [num_eq_95], 'AUC > 0.9': [num_greater_90], 'AUC = 0.9': [num_eq_90],
+                    'AUC > 0.85': [num_greater_85], 'AUC = 0.85': [num_eq_85], 'AUC > 0.8': [num_greater_80], 'AUC = 0.8': [num_eq_80],
+                    'p-value < 0.001': [num_less_001], 'p-value = 0.001': [num_eq_001],
+                    'p-value < 0.01': [num_less_01], 'p-value = 0.01': [num_eq_01], 
+                    'p-value < 0.05': [num_less_05], 'p-value = 0.05': [num_eq_05]}
+        df_num = pd.DataFrame(num_dict)
+        df_num = df_num.T
+        df_num = df_num.reset_index()
+        df_num.columns = ['Important Statistics' , 'Values']
+    
+        if Paired_non_parametric:
+            Testing_for_normality = False
+            
+    
+        if Testing_for_normality == False:
+            if include_CI == False:
+                df_plottable = pd.DataFrame(
+                    list(zip(Protein_names_lst,mean_HC_lst,median_HC_lst,mean_PG_lst,median_PG_lst,fold_change_mean_lst,fold_change_median_lst,
+                             log_2_fold_change_mean_lst, log_2_fold_change_median_lst,
+                             test_p_value_lst,q_values_lst,log_10_test_p_value_lst,
+                             unmodified_auc_scores_lst,auc_scores_lst,specificity_lst,sensitivity_lst,
+                             youden_index_lst,optimal_cutoff_lst, fpr_lst, tpr_lst,labels_lst,y_pred_optimal_lst)),
+                    columns =['Protein',f'Mean {HC}',f'Median {HC}',f'Mean {PG}',f'Median {PG}','FC Mean','FC Median','log2FC Mean','log2FC Median',
+                              p_test,'Test q-value','log10 p-value',
+                              'Unmodified AUC value','AUC value','Specificity','Sensitivity',
+                              'Youden Index','Optimal Cutoff','fpr','tpr','labels','y_pred_optimal'])
+            else:
+                df_dict = pd.DataFrame(
+                    list(zip(Protein_names_lst,mean_with_CI_HC_lst,median_HC_lst,mean_with_CI_PG_lst,median_PG_lst,fold_change_mean_lst,
+                             fold_change_median_lst,test_p_value_lst,q_values_lst,
+                             auc_scores_with_CI_lst,specificity_with_CI_lst,sensitivity_with_CI_lst,
+                             youden_index_with_CI_lst,optimal_cutoff_with_CI_lst)),
+                    columns =['Protein',f'Mean {HC}',f'Median {HC}',f'Mean {PG}',f'Median {PG}','FC Mean', 'FC Median',
+                              p_test,'Test q-value',
+                              'AUC value','Specificity','Sensitivity',
+                              'Youden Index','Optimal Cutoff'])
+                df_plottable = pd.DataFrame(
+                    list(zip(Protein_names_lst,mean_HC_lst,median_HC_lst,mean_PG_lst,median_PG_lst,fold_change_mean_lst,fold_change_medain_lst,
+                             log_2_fold_change_mean_lst,log_2_fold_change_median_lst,
+                             test_p_value_lst,q_values_lst,log_10_test_p_value_lst,
+                             unmodified_auc_scores_lst,auc_scores_lst,specificity_lst,sensitivity_lst,
+                             youden_index_lst,optimal_cutoff_lst, fpr_lst, tpr_lst,labels_lst,y_pred_optimal_lst)),
+                    columns =['Protein',f'Mean {HC}',f'Median {HC}',f'Mean {PG}',f'Median {PG}','FC Mean','FC Median','log2FC Mean','log2FC Median',
+                              p_test,'Test q-value','log10 p-value',
+                              'Unmodified AUC value','AUC value','Specificity','Sensitivity',
+                              'Youden Index','Optimal Cutoff','fpr','tpr','labels','y_pred_optimal'])
+        else:
+            if include_CI == False:
+                df_plottable = pd.DataFrame(
+                    list(zip(Protein_names_lst,mean_HC_lst,median_HC_lst,mean_PG_lst,median_PG_lst,fold_change_mean_lst,log_2_fold_change_mean_lst,
+                             p_value_shapiro_HC_lst,p_value_shapiro_PG_lst,test_type_lst,test_p_value_lst,q_values_lst,log_10_test_p_value_lst,
+                             unmodified_auc_scores_lst,auc_scores_lst,specificity_lst,sensitivity_lst,
+                             youden_index_lst,optimal_cutoff_lst, fpr_lst, tpr_lst,labels_lst,y_pred_optimal_lst)),
+                    columns =['Protein',f'Mean {HC}',f'Median {HC}',f'Mean {PG}',f'Median {PG}','FC','log2FC',
+                              f'{HC} Normality Shapiro Test',f'{PG} Normality Shapiro Test','Test Type', 'Test p-value','Test q-value','log10 p-value',
+                              'Unmodified AUC value','AUC value','Specificity','Sensitivity',
+                              'Youden Index','Optimal Cutoff','fpr','tpr','labels','y_pred_optimal'])
+            else:
+                df_dict = pd.DataFrame(
+                    list(zip(Protein_names_lst,mean_with_CI_HC_lst,median_HC_lst,mean_with_CI_PG_lst,median_PG_lst,fold_change_mean_lst,
+                             p_value_shapiro_HC_lst,p_value_shapiro_PG_lst,test_type_lst,test_p_value_lst,q_values_lst,
+                             auc_scores_with_CI_lst,specificity_with_CI_lst,sensitivity_with_CI_lst,
+                             youden_index_with_CI_lst,optimal_cutoff_with_CI_lst)),
+                    columns =['Protein',f'Mean {HC}',f'Median {HC}',f'Mean {PG}',f'Median {PG}',f'FC',
+                              f'{HC} Normality Shapiro Test',f'{PG} Normality Shapiro Test','Test Type', 'Test p-value','Test q-value',
+                              'AUC value','Specificity','Sensitivity',
+                              'Youden Index','Optimal Cutoff'])
+                df_plottable = pd.DataFrame(
+                    list(zip(Protein_names_lst,mean_HC_lst,median_HC_lst,mean_PG_lst,median_PG_lst,fold_change_mean_lst,log_2_fold_change_mean_lst,
+                             p_value_shapiro_HC_lst,p_value_shapiro_PG_lst,test_type_lst,test_p_value_lst,q_values_lst,log_10_test_p_value_lst,
+                             unmodified_auc_scores_lst,auc_scores_lst,specificity_lst,sensitivity_lst,
+                             youden_index_lst,optimal_cutoff_lst, fpr_lst, tpr_lst,labels_lst,y_pred_optimal_lst)),
+                    columns =['Protein',f'Mean {HC}',f'Median {HC}',f'Mean {PG}',f'Median {PG}','FC','log2FC',
+                              f'{HC} Normality Shapiro Test',f'{PG} Normality Shapiro Test','Test Type', 'Test p-value','Test q-value','log10 p-value',
+                              'Unmodified AUC value','AUC value','Specificity','Sensitivity',
+                              'Youden Index','Optimal Cutoff','fpr','tpr','labels','y_pred_optimal'])
+        if include_CI == False:
+            df_plottable.to_excel(f'{output_file_directory}{input_file}_test_1_2_output_plottable.xlsx', index=False)
+            df_num.to_excel(f'{output_file_directory}{input_file}_test_1_2_output_stats.xlsx', index=False)
+        else:
+            df_dict.to_excel(f'{output_file_directory}{input_file}_test_1_2_output.xlsx', index=False)
+            df_plottable.to_excel(f'{output_file_directory}{input_file}_test_1_2_output_plottable.xlsx', index=False)
+            df_num.to_excel(f'{output_file_directory}{input_file}_test_1_2_output_stats.xlsx', index=False)
+        if include_CI == False:
+            return df_num,df_plottable
+        else:
+            return df_num,df_dict,df_plottable
+
+
+
+    
+    def find_Outliers(self,p_value=0.05, AUC = 0.8):
+        import pandas as pd
+        import numpy as np
+        print('new code')
+
+        input_file_directory = self.input_file_directory
+        input_file = self.input_file
+        input_sorter_file_directory = self.output_file_directory
+        number_HC_PG_samples_list = self.number_HC_PG_samples_list
+        
+        data = pd.read_excel(f'{input_file_directory}{input_file}.xlsx')
+        
+        df_sorter = pd.read_excel(f'{input_sorter_file_directory}{input_file}_test_1_2_output_plottable.xlsx')
+    
+        if 'Man-Whitney U-Test p-value' in df_sorter.columns:
+            p_test = 'Man-Whitney U-Test p-value'
+        else:
+            p_test = 'Wilcoxon Signed Rank p-value'
+        print(p_test)
+        
+        df_sorter = df_sorter.sort_values(by=p_test, ascending=True)
+        df_sorter = df_sorter[df_sorter[p_test] < p_value]
+        df_sorter.sort_values(by='AUC value', ascending=True)
+        df_sorter = df_sorter[df_sorter['AUC value'] >= AUC]
+        # df_sorter = df_sorter[(df_sorter[f'FC {FC_type}'] >= FC_up) | (df_sorter[f'FC {FC_type}'] <= FC_down)]
+        filter_values = df_sorter['Protein'].to_list()
+        df = data[filter_values]
+        
+        num = number_HC_PG_samples_list
+        # dict = {}
+        count = []
+        count_p = []
+        for k in range(len(num)):
+            outliers_index = []
+            outliers_index_p = []
+            if k == 0:
+                w = 0
+            else:
+                w += num[k-1] 
+            v = w + num[k]
+            print(w,v)
+            for i in range(1,data.shape[1]):
+            #     #data.iloc[0:v,i] = np.log1p(data.iloc[0:v,i])
+            #     # mean = data.iloc[w:v,i].median()
+            #     # std = data.iloc[w:v,i].std()
+                for j in range(w,v):
+                    Q1 = data.iloc[0:v,i].quantile(0.25)
+                    Q3 = data.iloc[0:v,i].quantile(0.75)
+                    IQR = Q3 - Q1
+                    if data.iloc[j,i] >= (Q3 + 1.5*IQR) or data.iloc[j,i] <= (Q1 - 1.5*IQR):
+                        outliers_index.append(j)
+            for i in range(1,df.shape[1]):
+                for j in range(w,v):
+                    Q1 = df.iloc[0:v,i].quantile(0.25)
+                    Q3 = df.iloc[0:v,i].quantile(0.75)
+                    IQR = Q3 - Q1
+                    if df.iloc[j,i] >= (Q3 + 1.5*IQR) or df.iloc[j,i] <= (Q1 - 1.5*IQR):
+                        outliers_index_p.append(j)
+            for j in range(w,v):
+                c = 0
+                for i in range(len(outliers_index)):
+                    if outliers_index[i] == j:
+                        c += 1
+                c_p = 0
+                for i in range(len(outliers_index_p)):
+                    if outliers_index_p[i] == j:
+                        c_p += 1
+                
+                count.append([j,c])
+                count_p.append([j,c_p])
+        p90 = []
+        p80 = []
+        p70 = []
+        p60 = []
+        p50 = []
+        p40 = []
+        p30 = []
+        p20 = []
+        p10 = []
+        
+        
+        
+        for i in range(len(count)):
+            if count[i][1] / (data.shape[1] - 1) >= 0.9:
+                p90.append(i)
+            elif count[i][1] / (data.shape[1] - 1) >= 0.8:
+                p80.append(i)
+            elif count[i][1] / (data.shape[1] - 1) >= 0.7:
+                p70.append(i)
+            elif count[i][1] / (data.shape[1] - 1) >= 0.6:
+                p60.append(i)
+            elif count[i][1] / (data.shape[1] - 1) >= 0.5:
+                p50.append(i)
+            elif count[i][1] / (data.shape[1] - 1) >= 0.4:
+                p40.append(i)
+            elif count[i][1] / (data.shape[1] - 1) >= 0.3:
+                p30.append(i)
+            elif count[i][1] / (data.shape[1] - 1) >= 0.2:
+                p20.append(i)
+            elif count[i][1] / (data.shape[1] - 1) >= 0.1:
+                p10.append(i)
+    
+    
+        if len(p90) == 0:
+            p90.append(np.nan)
+        if len(p80) == 0:
+            p80.append(np.nan)
+        if len(p70) == 0:
+            p70.append(np.nan)
+        if len(p60) == 0:
+            p60.append(np.nan)
+        if len(p50) == 0:
+            p50.append(np.nan)
+        if len(p40) == 0:
+            p40.append(np.nan)
+        if len(p30) == 0:
+            p30.append(np.nan)
+        if len(p20) == 0:
+            p20.append(np.nan)
+        if len(p10) == 0:
+            p10.append(np.nan)
+            
+        p90_p = []
+        p80_p = []
+        p70_p = []
+        p60_p = []
+        p50_p = []
+        p40_p = []
+        p30_p = []
+        p20_p = []
+        p10_p = []
+        
+        
+        for i in range(len(count)):
+            if count_p[i][1] / (df.shape[1] - 1) >= 0.9:
+                p90_p.append(i)
+            elif count_p[i][1] / (df.shape[1] - 1) >= 0.8:
+                p80_p.append(i)
+            elif count_p[i][1] / (df.shape[1] - 1) >= 0.7:
+                p70_p.append(i)
+            elif count_p[i][1] / (df.shape[1] - 1) >= 0.6:
+                p60_p.append(i)
+            elif count_p[i][1] / (df.shape[1] - 1) >= 0.5:
+                p50_p.append(i)
+            elif count_p[i][1] / (df.shape[1] - 1) >= 0.4:
+                p40_p.append(i)
+            elif count_p[i][1] / (df.shape[1] - 1) >= 0.3:
+                p30_p.append(i)
+            elif count_p[i][1] / (df.shape[1] - 1) >= 0.2:
+                p20_p.append(i)
+            elif count_p[i][1] / (df.shape[1] - 1) >= 0.1:
+                p10_p.append(i)
+    
+    
+        if len(p90_p) == 0:
+            p90_p.append(np.nan)
+        if len(p80_p) == 0:
+            p80_p.append(np.nan)
+        if len(p70_p) == 0:
+            p70_p.append(np.nan)
+        if len(p60_p) == 0:
+            p60_p.append(np.nan)
+        if len(p50_p) == 0:
+            p50_p.append(np.nan)
+        if len(p40_p) == 0:
+            p40_p.append(np.nan)
+        if len(p30_p) == 0:
+            p30_p.append(np.nan)
+        if len(p20_p) == 0:
+            p20_p.append(np.nan)
+        if len(p10_p) == 0:
+            p10_p.append(np.nan)
+    
+            
+            
+        pdict = {}
+        pdict['Percentage of Proteins are Outliers'] = ['90%','80%','70%','60%','50%','40%','30%','20%','10%']
+        pdict['Sample Index'] = [p90,p80,p70,p60,p50,p40,p30,p20,p10]
+        pdict_p = {}
+        pdict_p['Percentage of Proteins are Outliers'] = ['90%','80%','70%','60%','50%','40%','30%','20%','10%']
+        pdict_p['Sample Index'] = [p90_p,p80_p,p70_p,p60_p,p50_p,p40_p,p30_p,p20_p,p10_p]
+        
+        # Create a DataFrame by padding the shorter lists with None
+        df1 = pd.DataFrame(pdict)
+    
+        drop = []
+        for i in range(df1.shape[0]):
+            if df1.iloc[i,1] == [np.nan]:
+                drop.append(i)
+        df1 = df1.drop(drop)
+        
+        df2 = pd.DataFrame(pdict_p)
+    
+        drop = []
+        for i in range(df2.shape[0]):
+            if df2.iloc[i,1] == [np.nan]:
+                drop.append(i)
+        df2 = df2.drop(drop)
+        
+        df1.to_excel(f'{input_file_directory}{input_file}_Outliers.xlsx', index = False)
+        df2.to_excel(f'{input_file_directory}{input_file}_Outliers_Conditional.xlsx', index = False)
+
+
+    
+    def median_normalization(self, cutoff = 50, conditional = False):
+        import pandas as pd
+        import numpy as np
+        import ast
+
+        input_file_directory = self.input_file_directory
+        input_file = self.input_file
+        if conditional:
+            input_outliers_file = f'{input_file}_Outliers_Conditional'
+        else:
+            input_outliers_file = f'{input_file}_Outliers'
+
+        number_HC_PG_samples_list = self.number_HC_PG_samples_list
+        
+        num = number_HC_PG_samples_list
+        col = 1
+        df_index = pd.read_excel(f'{input_file_directory}{input_outliers_file}.xlsx')
+        data = pd.read_excel(f'{input_file_directory}{input_file}.xlsx')
+        
+        #data = data.sort_values(by='Group', ascending=True)
+        # df_index['Sample ID'] = df_index['Sample ID'].apply(lambda x: pd.to_numeric(x, errors='coerce')).astype('Int64')
+        outliers_index = []
+        for i in range(df_index.shape[0]):
+            for j in range(cutoff//10, 10): 
+                if df_index['Percentage of Proteins are Outliers'][i] == f'{j}0%':
+                    print(df_index.iloc[i,col])
+                    for k in range(len(ast.literal_eval(df_index.iloc[i,col]))):
+                        outliers_index.append(int(ast.literal_eval(df_index.iloc[i,col])[k]))
+        outliers_index = sorted(outliers_index)
+        for i in range(len(outliers_index)):
+            gp_num = data.iloc[outliers_index[i],0]
+            for j in range(gp_num+1):
+                if j == 0:
+                    w = 0
+                else:
+                    w += num[j-1]
+                v = w + num[j]
+            for j in range(1,data.shape[1]):
+                median = data.iloc[w:v,j].median()
+                mad = np.median(np.abs(data.iloc[w:v,j] - median))
+                data.iloc[outliers_index[i],j] = median + (data.iloc[outliers_index[i],j] - median) / mad
+        data.to_excel(f'{input_file_directory}{input_file}_normalized.xlsx', index = False)
+
+
+    
+    def test_3_roc_curve (self,number_of_top_proteins= 10,Protein=None, Choose_specific_Protein_list = False, hide_labels = False):
+        import pandas as pd
+        import matplotlib.pyplot as plt
+        from sklearn.metrics import roc_curve, auc
+
+        
+        input_file_directory = self.output_file_directory
+        input_file = f'{self.input_file}_test_1_2_output_plottable'
+        HC = self.HC_PG_list[0]
+        PG = self.HC_PG_list[1]
+
+        index = number_of_top_proteins
+        # Function to convert string representation of a list to a list
+        def parse_list_string(x):
+            if isinstance(x, str):
+                # Add commas between elements
+                x = ' '.join(x.split())
+                x = x.replace('[', '').replace(']', '').replace(' ', ',')
+                return eval(f'[{x}]')
+            return x
+            
+        df_plottable = pd.read_excel(f'{input_file_directory}{input_file}.xlsx')
+        df_plottable = df_plottable.sort_values(by='AUC value', ascending=False)
+        df_plottable = df_plottable.reset_index()
+        # Apply the function to the 'tpr' column
+        
+        df_plottable['tpr'] = df_plottable['tpr'].apply(parse_list_string)
+        df_plottable['fpr'] = df_plottable['fpr'].apply(parse_list_string)
+        hidden_label = []
+        for i in range(index):
+            hidden_label.append(f'Prot_{i+1}')
+        # hidden_label = ['Prot_1','Prot_2','Prot_3','Prot_4','Prot_5','Prot_6','Prot_7','Prot_8','Prot_9','Prot_10']
+        if hide_labels:
+            label = hidden_label
+        else:
+            label = df_plottable['Protein']
+        if Choose_specific_Protein_list == False:
+            for i in range(index):
+                # if df_plottable['Unmodified AUC value'][i] >=0.5:
+                plt.plot(df_plottable['fpr'][i], df_plottable['tpr'][i], label = label[i])
+                # else:
+                #     plt.plot(df_plottable['tpr'][i], df_plottable['fpr'][i], label = df_plottable['Protein'][i])
+    
+            plt.plot([0, 1], [0, 1], linestyle='--', color='gray', alpha=0.8)
+    
+            plt.xlabel('1 - Specificity',fontsize=16)
+            plt.ylabel('Sensitivity',fontsize=16)
+            plt.title(f'ROC Analysis for {PG} vs {HC}', fontweight = 'bold',fontsize=16)
+            plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+            #plt.tight_layout()
+            plt.show()
+        
+        else:
+            for i in Protein:
+                for j in range(df_plottable['Protein'].size):
+                    if df_plottable['Protein'][j] == i:
+                        a = j
+                plt.plot(df_plottable['fpr'][a], df_plottable['tpr'][a], label = df_plottable['Protein'][a])
+    
+            plt.plot([0, 1], [0, 1], linestyle='--', color='gray', alpha=0.8)
+    
+            plt.xlabel('1 - Specificity',fontsize=16)
+            plt.ylabel('Sensitivity',fontsize=16)
+            plt.title(f'ROC Analysis for {PG} vs {HC}', fontweight = 'bold')
+            plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+            #plt.tight_layout()
+            plt.show()
+
+
+    
+    def test_4(self,color = ['orange','green','red','purple'],
+               p_value=0.05,AUC=0.8,FC_up=2,FC_down=0.5):
+
+        
+        import pandas as pd
+        import seaborn as sns
+        import numpy as np
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import LinearSegmentedColormap
+        import matplotlib.patches as patches
+
+        input_file_directory = self.input_file_directory
+        input_file = self.input_file
+        input_sorter_file_directory = self.output_file_directory
+        categories = self.HC_PG_list
+        number_of_samples = self.number_HC_PG_samples_list
+        FC_type = self.FC_type
+        
+        def create_diverging_colormap():
+            # Define the colors for the colormap
+            colors = [(0, 0, 1), (0, 0, 0), (1, 1, 0)]  # Blue, Black, Yellow
+    
+            # Create a colormap using LinearSegmentedColormap
+            cmap = LinearSegmentedColormap.from_list('blue_black_yellow', colors, N=256)
+    
+            return cmap
+            
+            
+        df = pd.read_excel(f'{input_file_directory}{input_file}.xlsx')
+        
+        df_dict = {}
+        
+        for i in range(len(number_of_samples)):
+            df1 = df[df['Group'].isin([i])]
+            df_dict[f'df{i}'] = df1
+        df_c = df_dict[f'df{0}']
+        
+        for i in range(1,len(number_of_samples)):
+            df =  pd.concat([df_c, df_dict[f'df{i}']])
+            df_c = df
+        df = df.drop('Group',axis = 1)
+        df = df.T.reset_index()
+        df = df.rename(columns={'index': 'Protein'}, inplace=False)
+    
+        
+        
+        df_sorter = pd.read_excel(f'{input_sorter_file_directory}{input_file}_test_1_2_output_plottable.xlsx')
+    
+        if 'Man-Whitney U-Test p-value' in df_sorter.columns:
+            p_test = 'Man-Whitney U-Test p-value'
+        else:
+            p_test = 'Wilcoxon Signed Rank p-value'
+        print(p_test)
+        
+        df_sorter = df_sorter.sort_values(by=p_test, ascending=True)
+        df_sorter = df_sorter[df_sorter[p_test] < p_value]
+        df_sorter.sort_values(by='AUC value', ascending=True)
+        df_sorter = df_sorter[df_sorter['AUC value'] >= AUC]
+        # df_sorter = df_sorter[(df_sorter[f'FC {FC_type}'] >= FC_up) | (df_sorter[f'FC {FC_type}'] <= FC_down)]
+        filter_values = df_sorter['Protein'].to_list()
+        df = df[df['Protein'].isin(filter_values)]
+        df['Protein'] = pd.Categorical(df['Protein'], categories=filter_values, ordered=True)
+        df = df.sort_values('Protein')
+        df = df.reset_index()
+        df = df.drop('index',axis=1)
+        
+        dim = (12, 12)
+        cmap = create_diverging_colormap()
+        scale = False
+        zscore = False
+        xlabel = True
+        ylabel = False
+        tickfont = (10, 10)
+    
+        for_title = ''
+        for i in range(len(categories)):
+            if i == 0:
+                for_title += f'{categories[i]}'
+            else:
+                for_title += f' vs {categories[i]}'
+        
+        numeric_df = df.drop('Protein', axis=1)
+        log_transformed_df = np.log1p(numeric_df)
+        hm = sns.clustermap(log_transformed_df, cmap=cmap, cbar_kws={"orientation": "vertical"}, cbar=True, cbar_pos = (0.99,0.045,0.01,0.752),
+                            z_score=zscore,row_cluster = True, col_cluster=False,
+                            xticklabels=xlabel, yticklabels=ylabel)
+        hm.ax_heatmap.set_title(f' Cluster Heatmap for {for_title}',fontweight = 'bold', fontsize = 18)
+        
+    
+        # Customize x-axis labels
+        heatmap_ax = hm.ax_heatmap.get_position()   
+        text_ax_x = hm.fig.add_axes([heatmap_ax.x0, heatmap_ax.y0 - 0.05, heatmap_ax.width, 0.05])
+        text_ax_x.axis('off')
+        total = 0
+        for i in range(len(number_of_samples)):
+            total += number_of_samples[i]
+        for i in range(len(number_of_samples)):
+            if i == 0:
+                x = 0
+                box_text_x = number_of_samples[i]/total/2
+            else:
+                x += number_of_samples[i-1]/total
+                box_text_x = x + number_of_samples[i]/total/2
+            box_width = number_of_samples[i]/total
+            box_height = 4
+            rect = patches.Rectangle((x, 0.5), box_width, box_height, linewidth=1, facecolor=color[i])
+            text_ax_x.add_patch(rect)
+            text_ax_x.text(box_text_x, 0.75, f'{number_of_samples[i]} {categories[i]}', ha='center', va='center', color='black', fontsize=12)
+     
+        
+        new_xticklabels = []
+        positions = []
+    
+        # Set new tick labels at the desired positions
+        hm.ax_heatmap.set_xticks(positions)
+        hm.ax_heatmap.set_xticklabels(new_xticklabels,fontsize = 16, rotation=0)
+        
+       
+        # Add y-axis title on the left side
+        hm.ax_heatmap.yaxis.set_label_coords(-0.2, 0.5)
+        hm.ax_heatmap.set_ylabel(f'{df.shape[0]} Proteins', rotation=90, labelpad=40, fontsize=16)
+
+        plt.show()
+
+
+
+    def test_5(self,p_value_threshold = 0.05):
+
+        import matplotlib.pyplot as plt
+        import numpy as np
+        import pandas as pd
+    
+        input_file_directory = self.output_file_directory
+        input_file = f'{self.input_file}_test_1_2_output_plottable'
+        HC = self.HC_PG_list[0]
+        PG = self.HC_PG_list[1]
+        FC_type = self.FC_type
+
+        threshold = p_value_threshold
+        # Sample data
+        df = pd.read_excel(f'{input_file_directory}{input_file}.xlsx')
+            
+        if 'Test p-value' in df.columns:
+            p_val_col_title = 'Test p-value' 
+        elif 'Wilcoxon Signed Rank p-value' in df.columns:
+            p_val_col_title = 'Wilcoxon Signed Rank p-value'
+        else:
+            p_val_col_title = 'Man-Whitney U-Test p-value'
+
+        log2FC = f'log2FC {FC_type}'
+        
+        # Set significance threshold (you can adjust this)
+        
+        # Plotting
+        plt.figure(figsize=(10, 6))
+    
+        # Highlight significant points
+        down_regulated = np.where((np.array(df[log2FC]) < -1) & (-np.log10(df[p_val_col_title]) > -np.log10(threshold)))[0]
+        up_regulated = np.where((np.array(df[log2FC]) > 1) & (-np.log10(df[p_val_col_title]) > -np.log10(threshold)))[0]
+        insignificant = np.where((np.array(df[log2FC]) > -1) & (np.array(df[log2FC]) < 1))
+        
+        plt.scatter(np.array(df[log2FC])[up_regulated], -np.log10(np.array(df[p_val_col_title]))[up_regulated], color='blue', s=30, alpha = 0.8, marker='o',                      label=f'Up in {PG} {len(up_regulated)}')
+        plt.scatter(np.array(df[log2FC])[down_regulated], -np.log10(np.array(df[p_val_col_title]))[down_regulated], color='orange', s=30, alpha = 0.8,                            marker='o', label=f'Down in {PG} {len(down_regulated)}')
+        plt.scatter(np.array(df[log2FC])[insignificant], -np.log10(np.array(df[p_val_col_title]))[insignificant], color='grey', s=30, alpha = 0.6,                                marker='o', label = 'Insignificant')
+        # Customize plot
+        plt.axhline(-np.log10(threshold), color='blue', linestyle='-')
+        plt.axvline(-1, color='blue', linestyle='-')
+        plt.axvline(1, color='blue', linestyle='-')
+        plt.title(f'Volcano Plot for {PG} vs {HC}', fontweight = 'bold', fontsize = 18)
+        plt.xlabel('Log2 Fold Change', fontsize = 18)
+        plt.ylabel('-log10 p value', fontsize = 18)
+        
+        #legend = plt.legend(loc='upper right', fontsize= 16,framealpha=0.1)  # Adjust framealpha for legend transparency
+        legend = plt.legend(loc='upper right', bbox_to_anchor=(1.35,0.6), ncol=1, fontsize=16, framealpha=0.1)
+    
+        # Set legend face color to transparent
+        legend.get_frame().set_facecolor('none')
+        plt.grid(True)
+        plt.show()
+
+
+
+    def test_6(self,z_score_normalization=True,p_value=0.05,AUC=0.8,FC_up=2,FC_down=0.5):
+        import seaborn as sns
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Ellipse
+        import numpy as np
+        import pandas as pd
+        from sklearn.decomposition import PCA
+
+        input_file_directory = self.input_file_directory
+        input_file = self.input_file
+        input_sorter_file_directory = self.output_file_directory
+        input_sorter_file = f'{self.input_file}_test_1_2_output_plottable'
+        HC = self.HC_PG_list[0]
+        PG = self.HC_PG_list[1]
+        
+        data_list = []
+        df = pd.read_excel(f'{input_file_directory}{input_file}.xlsx')
+        for i in range (len(df['Group'])):
+            if df['Group'][i] == 0.0: 
+               df['Group'][i] = HC
+            else:
+                df['Group'][i] = PG
+        groups = np.array(df['Group'].tolist())
+        df = df.drop('Group',axis = 1)
+        #df = df.T.reset_index()
+        #df = df.rename(columns={'index': 'Protein'}, inplace=False)
+        df_sorter = pd.read_excel((f'{input_sorter_file_directory}{input_sorter_file}.xlsx'))
+
+        if 'Man-Whitney U-Test p-value' in df_sorter.columns:
+            p_test = 'Man-Whitney U-Test p-value'
+        else:
+            p_test = 'Wilcoxon Signed Rank p-value'
+        print(p_test)
+        
+        df_sorter = df_sorter.sort_values(by=p_test, ascending=True)
+        df_sorter = df_sorter[df_sorter[p_test] < p_value]
+        # df_sorter.sort_values(by='AUC value', ascending=True)
+        # df_sorter = df_sorter[df_sorter['AUC value'] >= AUC]
+        # df_sorter = df_sorter[(df_sorter[f'FC {FC_type}'] >= FC_up) | (df_sorter[f'FC {FC_type}'] <= FC_down)]
+        filter_values = df_sorter['Protein'].to_list()
+
+        print(len(filter_values))
+        
+        #df = df[df['Protein'].isin(filter_values)]
+        df = df[filter_values]
+        df = df.T
+        # df = df.T.head(index)
+        
+        for i in range(df.shape[1]):
+            data_list.append(np.array(df.iloc[:,i].tolist()))
+        
+        # Perform PCA
+        pca = PCA(n_components=2)  # For 2D PCA
+        pca_result = pca.fit_transform(data_list)
+        
+        # Calculate the percentage of variance explained by each component
+        explained_var_ratio = pca.explained_variance_ratio_
+        
+        # Create a DataFrame for visualization
+        dp = pd.DataFrame(data=pca_result, columns=['PC1', 'PC2'])
+        dp['Group'] = groups
+        if z_score_normalization:
+            # standardization for PC1 and PC2
+            dp['PC1'] = (dp['PC1'] - dp['PC1'].mean()) / dp['PC1'].std()
+            dp['PC2'] = (dp['PC2'] - dp['PC2'].mean()) / dp['PC2'].std()
+        
+        # Plot 2D PCA
+        
+        # Plot confidence ellipses
+        def plot_ellipse(ax, data, color, alpha=0.5, label=None):
+            mean_x, mean_y = np.mean(data['PC1']), np.mean(data['PC2'])
+            cov_matrix = np.cov(data['PC1'], data['PC2'])
+            lambda_, v = np.linalg.eig(cov_matrix)
+            lambda_ = np.sqrt(lambda_)
+            ell = Ellipse(xy=(mean_x, mean_y), width=lambda_[0]*3, height=lambda_[1]*3, angle=np.degrees(np.arctan2(*v[:,0][::-1])), color=color, alpha=alpha)
+            ax.add_patch(ell)
+            ell.set_label(label)
+        
+        
+        plt.figure(figsize=(10, 8))
+        colors = {f'{HC}': 'orange', f'{PG}': 'blue'}
+        markers = {f'{HC}': 'o', f'{PG}': '^'}  # Add marker styles for each group
+        for group, color in colors.items():
+            subset = dp[dp['Group'] == group]
+            plt.scatter(subset['PC1'], subset['PC2'], label=group, color=color, s=50, marker=markers[group], alpha = 0.5)
+            plot_ellipse(plt.gca(), subset, color=color, alpha=0.3)
+            
+        # plt.title('2D PCA')
+        plt.xlabel(f'Principal Component 1 - {explained_var_ratio[0]*100:.2f}%', fontsize = 16)
+        plt.ylabel(f'Principal Component 2 - {explained_var_ratio[1]*100:.2f}%', fontsize = 16)
+        plt.title(f' PCA Analysis for {PG} vs {HC}', fontweight = 'bold', fontsize = 16)
+        
+        # Add grid and axis
+        plt.grid(True,linewidth=0.2)
+        plt.axhline(0, color='black', linestyle='--',linewidth=0.4, dashes=(10, 7))
+        plt.axvline(0, color='black', linestyle='--',linewidth=0.4, dashes=(10, 7))
+        
+        plt.legend(title='Groups',bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.show()
+    
+
+    
+    
+    def test_11(self, number_of_proteins_plotted = 50,threshold = 0.9):
+
+        import seaborn as sns
+        import matplotlib.pyplot as plt
+        import pandas as pd
+        import numpy as np
+
+        input_file_directory = self.input_file_directory
+        input_file = self.input_file
+        input_sorter_file_directory = self.output_file_directory
+        input_sorter_file = f'{input_file}_test_1_2_output_plottable'
+        HC = self.HC_PG_list[0]
+        PG = self.HC_PG_list[1]
+
+        index = number_of_proteins_plotted
+        
+        df = pd.read_excel(f'{input_file_directory}{input_file}.xlsx')
+        df_sorter = pd.read_excel((f'{input_sorter_file_directory}{input_sorter_file}.xlsx'))
+        df_sorter = df_sorter.sort_values(by='AUC value', ascending=False)
+        filter_values = df_sorter['Protein'].to_list()
+        a = []
+        for i in range(index):
+            a.append(filter_values[i])
+        b = a[::-1]
+        #df = df[df['Protein'].isin(filter_values)]
+        df = df[a]
+        
+        corr = df.corr(method='spearman')
+        # for i in range(corr.shape[0]):
+        #     for j in range(corr.shape[1]):
+        #         if corr.iloc[i,j]>0.9:
+        #             pass
+        #         else:
+        #             corr.iloc[i,j] = 0
+    
+        # Create a mask for the upper triangle
+        mask = np.ones_like(corr, dtype=bool)
+        for i in range(mask.shape[0]):
+            for j in range(mask.shape[1]):
+                if j>=i:
+                    mask[i,j] = False
+        # Set up the matplotlib figure
+        plt.figure(figsize=(20, 15))
+        
+        # Draw the heatmap with the mask and correct aspect ratio
+        hm = sns.heatmap(corr, mask = mask, cmap='Blues', vmax=1, vmin=threshold, annot=False,
+                    square=True, linewidths=.5, cbar_kws={"shrink": 1,"pad": 0.01,"aspect": 100},yticklabels=True)
+        #plt.yticks(rotation=45)  # Rotate the y-axis ticks
+        for i in range(corr.shape[0]):
+            plt.text(i, i+0.5, f'{filter_values[i]}', ha='right', va='center', fontsize=10, color='black')
+            plt.text(i+0.5, -0.1, f'{filter_values[i]}', ha='center', va='bottom', fontsize=10, color='black',rotation = 90)
+
+        max1 = 0
+        for i in range(corr.shape[0]):
+            max1 = max(max1,len(filter_values[i]))
+        print(max1)
+        
+        plt.title(f'Correlation Plot Analysis for {PG} vs {HC}',pad = max1*6, fontweight = 'bold', fontsize = 20)
+        
+        
+        plt.axis('off')
+        
+        plt.show()
