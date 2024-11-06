@@ -1,4 +1,6 @@
-# MohanLab Project
+# MohanLab Project Summary (May 2024 - Present)
+
+> **Important Note:** This is not the entire project, part was done with *Lasso Regression*, and the rest was done on other softwares, such as BayesiaLab and Google Sheets.
 
 ## Overview
 This project focuses on data analysis and machine learning techniques applied to biomedical research, specifically in the context of Lupus Nephritis. The goal is to identify relevant biomarkers and contribute to ongoing research efforts aimed at finding a cure for this kidney disease.
