@@ -1,4 +1,4 @@
-# MohanLab Project Summary (May 2024 - Present)
+# MohanLab Project Summary (May 2024 - Present) 
 
 > **Important Note:** This repository contains selected portions of the project, including the application of *Lasso Regression* for biomarker optimization, along with data visualization conducted using tools like BayesiaLab and Google Sheets.
 
