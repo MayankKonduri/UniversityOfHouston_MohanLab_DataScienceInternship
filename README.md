@@ -2,7 +2,7 @@
 
 > **Important Note:** This repository contains selected portions of the project, including the application of *Lasso Regression* for biomarker optimization, along with data visualization conducted using tools like BayesiaLab and Google Sheets.
 
-## Identification of Biomarkers in Patients with Lupus Nephritis
+## Identification of **Key** Biomarkers in Patients with Lupus Nephritis
 
 ## Overview
 This project involves advanced data analysis and machine learning techniques applied to biomedical research, with a specific focus on identifying biomarkers for Lupus Nephritis. Our objective is to support ongoing efforts in the quest to find effective treatments and potentially a cure for this kidney disease.
@@ -28,6 +28,8 @@ The methodology integrates multiple tools and approaches:
 - **Lasso Regression:** Optimizes biomarker selection by emphasizing features that contribute significantly to ROC AUC scores.
 - **BayesiaLab:** Used for visualizing relationships between proteins, aiding in the understanding of gene-protein interactions within Lupus Nephritis.
 - **Data Visualization in Google Sheets:** Synthesized complex data across patient demographics for a comprehensive visual analysis.
+
+![Trial_Lasso_Binary_Classification_Top_N](https://github.com/user-attachments/assets/d7e24399-023b-4919-b10f-c146352ab880)
 
 ## References
 
