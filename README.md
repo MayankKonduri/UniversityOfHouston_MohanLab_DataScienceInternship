@@ -33,7 +33,7 @@ The methodology integrates multiple tools and approaches:
 
 ## References
 
-[1] Robert Tibshirani. Regression shrinkage and selection via the lasso. Journal of the Royal Statistical Society, 58(1):267–288, 1996.
+[1] Robert Tibshirani. *Regression shrinkage and selection via the lasso.* Journal of the Royal Statistical Society, 58(1):267–288, 1996.
 
 ## Requirements
 - Python 3.x
