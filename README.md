@@ -1,4 +1,4 @@
-# MohanLab Project Summary (May 2024 - Present) 
+# MohanLab Project Summary 
 
 > **Important Note:** This repository contains selected portions of the project, including the application of *Lasso Regression* for biomarker optimization, along with data visualization conducted using tools like BayesiaLab and Google Sheets.
 
@@ -34,17 +34,3 @@ The methodology integrates multiple tools and approaches:
 ## References
 
 [1] Robert Tibshirani. *Regression shrinkage and selection via the lasso.* Journal of the Royal Statistical Society, 58(1):267–288, 1996.
-
-## Requirements
-- Python 3.x
-- NumPy
-- Pandas
-- Scikit-learn
-- Keras
-- Matplotlib (for plotting ROC curves)
-
-## Installation
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/UniversityOfHouston_MohanLab_DataScienceInternship.git
-   cd UniversityOfHouston_MohanLab_DataScienceInternship
